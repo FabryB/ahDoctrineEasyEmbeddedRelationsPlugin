@@ -90,6 +90,10 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
       {
         $formArgs[0]['ah_add_delete_checkbox'] = true;
       }
+      if ((isset($formArgs[0]) && !array_key_exists('ah_add_ignore_checkbox', $formArgs[0])) || !isset($formArgs[0]))
+      {
+        $formArgs[0]['ah_add_ignore_checkbox'] = true;
+      }
       
       if ($relation->isOneToOne())
       {
@@ -168,11 +172,20 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
     if ($form instanceof sfFormDoctrine && $form->getOption('ah_add_delete_checkbox', false) && !$form->isNew())
     {
       $form->setWidget('delete_object', new sfWidgetFormInputCheckbox(array('label' => 'Delete')));
-      $form->setValidator('delete_object', new sfValidatorPass());
+      $form->setValidator('delete_object', new sfValidatorPass(array('required' => false)));
 
       return $form;
     }
+    
+    if ($form instanceof sfFormDoctrine && $form->getOption('ah_add_ignore_checkbox', true) && $form->isNew())
+    {
+      $form->setWidget('ignore_object', new sfWidgetFormInputCheckbox(array('label' => 'Ignore')));
+      $form->setValidator('ignore_object', new sfValidatorPass(array('required' => false)));
+      $form->setDefault('ignore_object', true);
 
+      return $form;
+    }
+    
     return false;
   }
 
@@ -328,14 +341,22 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
    *
    * @see sfFormObject::saveEmbeddedForms()
    */
+  //public function saveEmbeddedForms($con = null, $forms = null, $taintedValues = null, $taintedFiles = null)
   public function saveEmbeddedForms($con = null, $forms = null)
   {
-    if (null === $con) $con = $this->getConnection();
-    if (null === $forms) $forms = $this->getEmbeddedForms();
-
-    foreach ($forms as $form)
+    if (null === $con)
     {
-      if ($form instanceof sfFormObject)
+      $con = $this->getConnection();
+    }
+
+    if (null === $forms)
+    {
+      $forms = $this->embeddedForms;
+    }
+
+    foreach ($forms as $key => $form)
+    {
+      if ($form instanceof sfFormDoctrine)
       {
         /**
          * we know it's a form but we don't know what (embedded) relation it represents;
@@ -349,7 +370,12 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
           continue;
         }
         
-        $form->getObject()->save($con);
+        if (!$form->isNew)
+        {
+          unset($form->validatorSchema['_csrf_token']);
+          $form->bind($this->taintedValues[$key], $this->taintedFiles);
+          $form->doSave($con);
+        }
         $form->saveEmbeddedForms($con);
       }
       else
@@ -403,6 +429,11 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
    */
   protected function isNewFormEmpty(array $values, array $keys)
   {
+    if (isset($values['ignore_object']))
+    {
+      return true;
+    }
+
     if (count($keys['considerNewFormEmptyFields']) == 0 || !isset($values)) return false;
 
     $emptyFields = 0;
