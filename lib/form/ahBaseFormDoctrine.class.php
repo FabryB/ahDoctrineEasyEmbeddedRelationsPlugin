@@ -326,6 +326,29 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
   {
     return $this->scheduledForDeletion;
   }
+  
+  /**
+   * Updates and saves the current object.
+   *
+   * If you want to add some logic before saving or save other associated
+   * objects, this is the method to override.
+   *
+   * @param mixed $con An optional connection object
+   */
+  protected function doSave($con = null)
+  {
+    if (null === $con)
+    {
+      $con = $this->getConnection();
+    }
+
+    $this->updateObject();
+
+    // embedded forms
+    $this->saveEmbeddedForms($con);
+    
+    $this->getObject()->save($con);
+  }
 
   /**
    * Saves embedded form objects.
@@ -369,13 +392,11 @@ abstract class ahBaseFormDoctrine extends sfFormDoctrine
         {
           continue;
         }
-        
-        if (!$form->isNew)
-        {
-          unset($form->validatorSchema['_csrf_token']);
-          $form->bind($this->taintedValues[$key], $this->taintedFiles);
-          $form->doSave($con);
-        }
+
+        unset($form->validatorSchema[self::$CSRFFieldName]);
+        $form->bind($this->taintedValues[$key], $this->taintedFiles);
+        $form->doSave($con);
+
         $form->saveEmbeddedForms($con);
       }
       else
